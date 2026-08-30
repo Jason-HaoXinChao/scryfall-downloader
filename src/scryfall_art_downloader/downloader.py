@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from .client import ScryfallClient, ScryfallError
 from .models import DeckEntry, DownloadResult
+from .processing import DEFAULT_BLEED_PIXELS, add_bleed, bleed_path
 
 
 ProgressCallback = Callable[[int, int, DownloadResult], None]
@@ -49,9 +50,13 @@ def download_entries(
     output_dir: Path,
     image_type: str = "png",
     overwrite: bool = False,
+    add_bleed_edge: bool = False,
+    bleed_pixels: int = DEFAULT_BLEED_PIXELS,
     client: ScryfallClient | None = None,
     progress: ProgressCallback | None = None,
 ) -> list[DownloadResult]:
+    if add_bleed_edge and image_type != "png":
+        raise ValueError("Bleed processing requires full-card PNG images")
     entries = list(entries)
     output_dir.mkdir(parents=True, exist_ok=True)
     client = client or ScryfallClient()
@@ -71,7 +76,9 @@ def download_entries(
                 raise ScryfallError(f"No {image_type!r} image is available for this printing")
 
             files: list[str] = []
+            processed_files: list[str] = []
             skipped = 0
+            changed = False
             base = safe_filename(f"{card['name']} [{entry.set_code} {entry.collector_number}]")
             for face_label, url in urls:
                 suffix = ".png" if image_type == "png" else _url_suffix(url)
@@ -85,12 +92,29 @@ def download_entries(
                 try:
                     client.download(url, partial)
                     partial.replace(target)
+                    changed = True
                 finally:
                     partial.unlink(missing_ok=True)
 
-            status = "skipped" if skipped == len(urls) else "downloaded"
-            message = warning + ("File already exists." if status == "skipped" else "")
-            result = DownloadResult(entry, status, files, message.strip())
+            if add_bleed_edge:
+                for filename in files:
+                    source = Path(filename)
+                    processed = bleed_path(source)
+                    processed_files.append(str(processed))
+                    if processed.exists() and not overwrite:
+                        continue
+                    add_bleed(source, processed, bleed_pixels=bleed_pixels)
+                    changed = True
+
+            status = "downloaded" if changed else "skipped"
+            message = warning + ("All output files already exist." if status == "skipped" else "")
+            result = DownloadResult(
+                entry,
+                status,
+                files,
+                processed_files,
+                message.strip(),
+            )
         except (ScryfallError, OSError, KeyError, ValueError) as exc:
             result = DownloadResult(entry, "failed", message=str(exc))
 
@@ -108,4 +132,3 @@ def _normalized_name(name: str) -> str:
 def _url_suffix(url: str) -> str:
     suffix = Path(urlparse(url).path).suffix.lower()
     return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp"} else ".jpg"
-

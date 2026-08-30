@@ -16,6 +16,7 @@ class DownloaderApp:
         self.events: queue.Queue = queue.Queue()
         self.output_dir = tk.StringVar(value=str(Path.cwd() / "downloads"))
         self.image_type = tk.StringVar(value="png")
+        self.add_bleed = tk.BooleanVar(value=False)
         self._build()
 
     def _build(self) -> None:
@@ -42,6 +43,7 @@ class DownloaderApp:
         ttk.Label(options, text="Image:").pack(side="left")
         ttk.Radiobutton(options, text="Full card (PNG)", variable=self.image_type, value="png").pack(side="left", padx=8)
         ttk.Radiobutton(options, text="Artwork only", variable=self.image_type, value="art_crop").pack(side="left", padx=8)
+        ttk.Checkbutton(options, text="Add 36 px bleed", variable=self.add_bleed).pack(side="left", padx=8)
         self.download_button = ttk.Button(options, text="Download", command=self.start_download)
         self.download_button.pack(side="right")
 
@@ -73,22 +75,31 @@ class DownloaderApp:
         except DeckParseError as exc:
             messagebox.showerror("Invalid deck list", str(exc))
             return
+        if self.add_bleed.get() and self.image_type.get() != "png":
+            messagebox.showerror("Invalid options", "Bleed processing requires Full card (PNG).")
+            return
         self.download_button.configure(state="disabled")
         self.progress.configure(maximum=len(entries), value=0)
         self._set_log("")
         thread = threading.Thread(
             target=self._worker,
-            args=(entries, Path(self.output_dir.get()), self.image_type.get()),
+            args=(entries, Path(self.output_dir.get()), self.image_type.get(), self.add_bleed.get()),
             daemon=True,
         )
         thread.start()
         self.root.after(75, self._poll_events)
 
-    def _worker(self, entries, output_dir, image_type) -> None:
+    def _worker(self, entries, output_dir, image_type, add_bleed_edge) -> None:
         def progress(index, total, result):
             self.events.put(("progress", index, total, result))
 
-        results = download_entries(entries, output_dir, image_type=image_type, progress=progress)
+        results = download_entries(
+            entries,
+            output_dir,
+            image_type=image_type,
+            add_bleed_edge=add_bleed_edge,
+            progress=progress,
+        )
         self.events.put(("done", results, output_dir))
 
     def _poll_events(self) -> None:
@@ -133,4 +144,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

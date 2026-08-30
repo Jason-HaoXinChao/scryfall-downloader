@@ -16,6 +16,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", type=Path, default=Path("downloads"))
     parser.add_argument("--image-type", choices=("png", "art_crop"), default="png")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--add-bleed",
+        action="store_true",
+        help="also create 750x1050 cards with a 36-pixel print bleed",
+    )
+    parser.add_argument(
+        "--bleed-pixels",
+        type=int,
+        default=36,
+        help="bleed width in pixels (default: 36)",
+    )
     parser.add_argument("--delay", type=float, default=0.15, help="seconds between API requests")
     parser.add_argument("--report", type=Path, help="write a JSON result report")
     return parser
@@ -23,6 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.add_bleed and args.image_type != "png":
+        print("Error: --add-bleed requires --image-type png.", file=sys.stderr)
+        return 2
     try:
         text = args.deck.read_text(encoding="utf-8-sig")
         entries = unique_printings(parse_deck_list(text))
@@ -42,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         args.output,
         image_type=args.image_type,
         overwrite=args.overwrite,
+        add_bleed_edge=args.add_bleed,
+        bleed_pixels=args.bleed_pixels,
         client=client,
         progress=show_progress,
     )
@@ -58,4 +74,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

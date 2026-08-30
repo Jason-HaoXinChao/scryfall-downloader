@@ -16,7 +16,7 @@ The set code and collector number select the exact printing. Duplicate printings
 - Double-faced card support
 - Arena-style deck sections and `SB:` lines
 - Safe filenames, existing-file skipping, and partial-download cleanup
-- No third-party Python dependencies
+- Optional print-bleed processing adapted from `the-bleed-edgemaxxer`
 - API request pacing that follows Scryfall's published guidance
 
 ## Run from source
@@ -40,6 +40,14 @@ Or use the command line:
 ```powershell
 scryfall-download deck.txt --output downloads --image-type png
 ```
+
+Add `--add-bleed` to keep the downloaded PNG and create a second `_bleed.png` file:
+
+```powershell
+scryfall-download deck.txt --output downloads --image-type png --add-bleed
+```
+
+Bleed output is normalized to 750×1050, gains a 36-pixel edge on every side, and is saved as an 822×1122 PNG at 300 DPI. Mostly dark card perimeters use their dominant edge color. Other cards mirror the top and side edges, matching the original bleed-edgemaxxer behavior. Use `--bleed-pixels` to change the width.
 
 Use `--image-type art_crop` to download only the illustration. Run `scryfall-download --help` for all options.
 

@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scryfall-card-art-downloader"
-version = "0.1.0"
+version = "0.2.0"
 description = "Download exact Magic: The Gathering card printings from Scryfall deck lists."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+dependencies = ["Pillow>=11.0"]
 authors = [{ name = "Jason Chao" }]
 keywords = ["magic-the-gathering", "mtg", "scryfall"]
 classifiers = [
@@ -27,4 +28,3 @@ scryfall-download-gui = "scryfall_art_downloader.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-

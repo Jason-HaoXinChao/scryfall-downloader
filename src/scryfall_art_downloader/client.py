@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 
 
 API_ROOT = "https://api.scryfall.com"
-USER_AGENT = "scryfall-card-art-downloader/0.1.0 (personal desktop application)"
+USER_AGENT = "scryfall-card-art-downloader/0.2.0 (personal desktop application)"
 ACCEPT = "application/json;q=0.9,*/*;q=0.8"
 
 
@@ -66,4 +66,3 @@ class ScryfallClient:
             return payload.get("details", exc.reason)
         except (ValueError, UnicodeDecodeError, OSError):
             return str(exc.reason)
-

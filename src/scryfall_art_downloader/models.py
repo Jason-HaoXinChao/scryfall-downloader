@@ -20,10 +20,10 @@ class DownloadResult:
     entry: DeckEntry
     status: str
     files: list[str] = field(default_factory=list)
+    processed_files: list[str] = field(default_factory=list)
     message: str = ""
 
     def to_dict(self) -> dict:
         result = asdict(self)
         result["entry"] = asdict(self.entry)
         return result
-
