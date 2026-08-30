@@ -24,8 +24,8 @@ The set code and collector number select the exact printing. Duplicate printings
 Python 3.10 or newer is required.
 
 ```powershell
-git clone <repository-url>
-cd scryfall-card-art-downloader
+git clone https://github.com/Jason-HaoXinChao/scryfall-downloader.git
+cd scryfall-downloader
 python -m pip install -e .
 ```
 
@@ -79,4 +79,3 @@ python -m unittest discover -s tests -v
 ## License
 
 The source code is available under the MIT License. This license does not grant rights to downloaded card images.
-
