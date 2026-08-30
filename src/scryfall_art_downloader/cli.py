@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .client import ScryfallClient
 from .downloader import download_entries
-from .parser import DeckParseError, parse_deck_list, unique_printings
+from .parser import DeckParseError, combine_printings, parse_deck_list
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,13 +19,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--add-bleed",
         action="store_true",
-        help="also create 750x1050 cards with a 36-pixel print bleed",
+        help="also create 63x88 mm cards with 1.5 mm bleed per side",
     )
     parser.add_argument(
-        "--bleed-pixels",
-        type=int,
-        default=36,
-        help="bleed width in pixels (default: 36)",
+        "--bleed-mm",
+        type=float,
+        default=1.5,
+        help="bleed width per side in millimeters (default: 1.5)",
     )
     parser.add_argument("--delay", type=float, default=0.15, help="seconds between API requests")
     parser.add_argument("--report", type=Path, help="write a JSON result report")
@@ -39,13 +39,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         text = args.deck.read_text(encoding="utf-8-sig")
-        entries = unique_printings(parse_deck_list(text))
+        entries = combine_printings(parse_deck_list(text))
         client = ScryfallClient(delay=args.delay)
     except (OSError, DeckParseError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
-    print(f"Found {len(entries)} unique printing(s).")
+    total_copies = sum(entry.quantity for entry in entries)
+    print(f"Found {len(entries)} unique printing(s), {total_copies} total card(s).")
 
     def show_progress(index, total, result):
         message = f" - {result.message}" if result.message else ""
@@ -57,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         image_type=args.image_type,
         overwrite=args.overwrite,
         add_bleed_edge=args.add_bleed,
-        bleed_pixels=args.bleed_pixels,
+        bleed_mm=args.bleed_mm,
         client=client,
         progress=show_progress,
     )

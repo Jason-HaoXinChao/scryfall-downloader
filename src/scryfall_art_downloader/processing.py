@@ -2,11 +2,12 @@ from collections import Counter
 from enum import Enum
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 
-CARD_SIZE = (750, 1050)
-DEFAULT_BLEED_PIXELS = 36
+DEFAULT_DPI = 300
+CARD_SIZE_MM = (63.0, 88.0)
+DEFAULT_BLEED_MM = 1.5
 DARK_TOLERANCE = 0.20
 DARK_PERIMETER_THRESHOLD = 0.80
 
@@ -19,40 +20,56 @@ class EdgeTechnique(str, Enum):
 def add_bleed(
     source: Path,
     destination: Path,
-    bleed_pixels: int = DEFAULT_BLEED_PIXELS,
-    card_size: tuple[int, int] = CARD_SIZE,
+    bleed_mm: float = DEFAULT_BLEED_MM,
+    card_size_mm: tuple[float, float] = CARD_SIZE_MM,
+    dpi: int = DEFAULT_DPI,
 ) -> EdgeTechnique:
-    """Resize a card and add print bleed using the original bleed-edgemaxxer algorithm."""
-    if bleed_pixels < 1:
-        raise ValueError("bleed_pixels must be at least 1")
-    if bleed_pixels > min(card_size):
-        raise ValueError("bleed_pixels cannot be larger than the card dimensions")
+    """Create an exact physical trim size plus bleed without stretching the card."""
+    if bleed_mm <= 0:
+        raise ValueError("bleed_mm must be greater than zero")
+    if dpi <= 0:
+        raise ValueError("dpi must be greater than zero")
+    if bleed_mm > min(card_size_mm):
+        raise ValueError("bleed_mm cannot be larger than the card dimensions")
+
+    card_size = tuple(millimeters_to_pixels(value, dpi) for value in card_size_mm)
+    bleed_pixels = millimeters_to_pixels(bleed_mm, dpi)
 
     with Image.open(source) as opened:
-        card = opened.convert("RGB")
-        if card.size != card_size:
-            card = card.resize(card_size, Image.Resampling.LANCZOS)
-
+        rgba = opened.convert("RGBA")
+        if rgba.size != card_size:
+            rgba = ImageOps.fit(
+                rgba,
+                card_size,
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+        underlay = _inset_underlay(rgba, bleed_pixels)
+        card = Image.alpha_composite(underlay.convert("RGBA"), rgba).convert("RGB")
         perimeter = _perimeter_pixels(card)
         technique, fill_color = _select_technique(perimeter)
         width, height = card.size
-        output = Image.new(
-            "RGB",
-            (width + 2 * bleed_pixels, height + 2 * bleed_pixels),
-            fill_color,
-        )
+        output_size = (width + 2 * bleed_pixels, height + 2 * bleed_pixels)
+        if technique is EdgeTechnique.SIMPLE:
+            output = Image.new("RGB", output_size, fill_color)
+        else:
+            output = Image.new("RGB", output_size, (0, 0, 0))
+            output.paste(card, (bleed_pixels, bleed_pixels))
+            _paste_extended_edges(output, card, bleed_pixels)
+
         output.paste(card, (bleed_pixels, bleed_pixels))
 
-        if technique is EdgeTechnique.REPLICATE:
-            _paste_replicated_edges(output, card, bleed_pixels)
-
         destination.parent.mkdir(parents=True, exist_ok=True)
-        output.save(destination, format="PNG", dpi=(300, 300))
+        output.save(destination, format="PNG", dpi=(dpi, dpi))
         return technique
 
 
 def bleed_path(source: Path) -> Path:
     return source.with_name(f"{source.stem}_bleed.png")
+
+
+def millimeters_to_pixels(millimeters: float, dpi: int = DEFAULT_DPI) -> int:
+    return round(millimeters * dpi / 25.4)
 
 
 def _perimeter_pixels(image: Image.Image) -> list[tuple[int, int, int]]:
@@ -78,17 +95,29 @@ def _select_technique(
     return EdgeTechnique.REPLICATE, (0, 0, 0)
 
 
-def _paste_replicated_edges(output: Image.Image, card: Image.Image, bleed: int) -> None:
+def _paste_extended_edges(output: Image.Image, card: Image.Image, bleed: int) -> None:
+    """Extend the outermost pixels without repeating visible card features."""
     width, height = card.size
-    top = card.crop((0, 0, width, bleed)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-    left = card.crop((0, 0, bleed, height)).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    right = card.crop((width - bleed, 0, width, height)).transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    left_corner = left.crop((0, 0, bleed, bleed)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-    right_corner = right.crop((0, 0, bleed, bleed)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    top = card.crop((0, 0, width, 1)).resize((width, bleed))
+    bottom = card.crop((0, height - 1, width, height)).resize((width, bleed))
+    left = card.crop((0, 0, 1, height)).resize((bleed, height))
+    right = card.crop((width - 1, 0, width, height)).resize((bleed, height))
 
     output.paste(top, (bleed, 0))
+    output.paste(bottom, (bleed, height + bleed))
     output.paste(left, (0, bleed))
     output.paste(right, (width + bleed, bleed))
-    output.paste(left_corner, (0, 0))
-    output.paste(right_corner, (width + bleed, 0))
+    output.paste(card.getpixel((0, 0)), (0, 0, bleed, bleed))
+    output.paste(card.getpixel((width - 1, 0)), (width + bleed, 0, width + 2 * bleed, bleed))
+    output.paste(card.getpixel((0, height - 1)), (0, height + bleed, bleed, height + 2 * bleed))
+    output.paste(
+        card.getpixel((width - 1, height - 1)),
+        (width + bleed, height + bleed, width + 2 * bleed, height + 2 * bleed),
+    )
 
+
+def _inset_underlay(rgba: Image.Image, inset: int) -> Image.Image:
+    """Build an opaque background from inside the rounded card boundary."""
+    width, height = rgba.size
+    inner = rgba.crop((inset, inset, width - inset, height - inset)).convert("RGB")
+    return inner.resize((width, height), Image.Resampling.LANCZOS)

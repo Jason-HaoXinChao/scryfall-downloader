@@ -1,4 +1,5 @@
 import re
+import shutil
 import unicodedata
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -6,7 +7,7 @@ from urllib.parse import urlparse
 
 from .client import ScryfallClient, ScryfallError
 from .models import DeckEntry, DownloadResult
-from .processing import DEFAULT_BLEED_PIXELS, add_bleed, bleed_path
+from .processing import DEFAULT_BLEED_MM, add_bleed, bleed_path
 
 
 ProgressCallback = Callable[[int, int, DownloadResult], None]
@@ -51,7 +52,7 @@ def download_entries(
     image_type: str = "png",
     overwrite: bool = False,
     add_bleed_edge: bool = False,
-    bleed_pixels: int = DEFAULT_BLEED_PIXELS,
+    bleed_mm: float = DEFAULT_BLEED_MM,
     client: ScryfallClient | None = None,
     progress: ProgressCallback | None = None,
 ) -> list[DownloadResult]:
@@ -83,18 +84,29 @@ def download_entries(
             for face_label, url in urls:
                 suffix = ".png" if image_type == "png" else _url_suffix(url)
                 face = f"_{face_label}" if face_label else ""
-                target = output_dir / f"{base}{face}{suffix}"
-                files.append(str(target))
-                if target.exists() and not overwrite:
-                    skipped += 1
-                    continue
-                partial = target.with_suffix(target.suffix + ".part")
-                try:
-                    client.download(url, partial)
-                    partial.replace(target)
-                    changed = True
-                finally:
-                    partial.unlink(missing_ok=True)
+                targets = [
+                    output_dir / f"{base}{face}{_copy_label(copy, entry.quantity)}{suffix}"
+                    for copy in range(1, entry.quantity + 1)
+                ]
+                files.extend(str(target) for target in targets)
+                missing = [target for target in targets if overwrite or not target.exists()]
+                skipped += len(targets) - len(missing)
+                if missing:
+                    seed = missing[0]
+                    partial = seed.with_suffix(seed.suffix + ".part")
+                    try:
+                        client.download(url, partial)
+                        partial.replace(seed)
+                        changed = True
+                    finally:
+                        partial.unlink(missing_ok=True)
+                    for target in missing[1:]:
+                        partial = target.with_suffix(target.suffix + ".part")
+                        try:
+                            shutil.copyfile(seed, partial)
+                            partial.replace(target)
+                        finally:
+                            partial.unlink(missing_ok=True)
 
             if add_bleed_edge:
                 for filename in files:
@@ -103,7 +115,7 @@ def download_entries(
                     processed_files.append(str(processed))
                     if processed.exists() and not overwrite:
                         continue
-                    add_bleed(source, processed, bleed_pixels=bleed_pixels)
+                    add_bleed(source, processed, bleed_mm=bleed_mm)
                     changed = True
 
             status = "downloaded" if changed else "skipped"
@@ -132,3 +144,7 @@ def _normalized_name(name: str) -> str:
 def _url_suffix(url: str) -> str:
     suffix = Path(urlparse(url).path).suffix.lower()
     return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp"} else ".jpg"
+
+
+def _copy_label(copy_number: int, quantity: int) -> str:
+    return f"_copy-{copy_number}" if quantity > 1 else ""

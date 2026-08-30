@@ -1,6 +1,11 @@
 import unittest
 
-from scryfall_art_downloader.parser import DeckParseError, parse_deck_list, unique_printings
+from scryfall_art_downloader.parser import (
+    DeckParseError,
+    combine_printings,
+    parse_deck_list,
+    unique_printings,
+)
 
 
 class ParseDeckListTests(unittest.TestCase):
@@ -25,7 +30,22 @@ class ParseDeckListTests(unittest.TestCase):
         entries = parse_deck_list("1 Card One (ABC) 1\n2 Card One (abc) 1")
         self.assertEqual(len(unique_printings(entries)), 1)
 
+    def test_combines_quantities_for_repeated_printings(self):
+        entries = parse_deck_list("2 Card One (ABC) 1\n3 Card One (abc) 1")
+        combined = combine_printings(entries)
+        self.assertEqual(len(combined), 1)
+        self.assertEqual(combined[0].quantity, 5)
+
+    def test_ignores_prismatic_marker_after_card_name(self):
+        entry = parse_deck_list("1 Sol Ring *E* (CMM) 396")[0]
+        self.assertEqual(entry.name, "Sol Ring")
+        self.assertEqual(entry.collector_number, "396")
+
+    def test_ignores_prismatic_marker_at_end_of_line(self):
+        entry = parse_deck_list("1 Sol Ring (CMM) 396 *E*")[0]
+        self.assertEqual(entry.name, "Sol Ring")
+        self.assertEqual(entry.collector_number, "396")
+
 
 if __name__ == "__main__":
     unittest.main()
-

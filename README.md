@@ -7,13 +7,14 @@ Download images for exact Magic: The Gathering printings from a deck list. Both 
 4 Lightning Bolt (CLB) 187
 ```
 
-The set code and collector number select the exact printing. Duplicate printings are downloaded once, regardless of deck quantity.
+The set code and collector number select the exact printing. The quantity controls how many image files are created. Repeated lines for the same printing are combined.
 
 ## Features
 
 - Exact printing lookup through Scryfall's `/cards/:set/:collector_number` API
 - Complete card PNGs or artwork-only crops
 - Double-faced card support
+- Numbered output copies based on deck quantity
 - Arena-style deck sections and `SB:` lines
 - Safe filenames, existing-file skipping, and partial-download cleanup
 - Optional print-bleed processing adapted from `the-bleed-edgemaxxer`
@@ -47,7 +48,9 @@ Add `--add-bleed` to keep the downloaded PNG and create a second `_bleed.png` fi
 scryfall-download deck.txt --output downloads --image-type png --add-bleed
 ```
 
-Bleed output is normalized to 750×1050, gains a 36-pixel edge on every side, and is saved as an 822×1122 PNG at 300 DPI. Mostly dark card perimeters use their dominant edge color. Other cards mirror the top and side edges, matching the original bleed-edgemaxxer behavior. Use `--bleed-pixels` to change the width.
+Bleed output has an exact 63×88 mm trim area plus 1.5 mm beyond every edge. At 300 DPI, the trim is 744×1039 pixels and the final 66×91 mm canvas is 780×1075 pixels. The source aspect ratio is preserved with a minimal center crop instead of being stretched. Mostly dark card perimeters use their dominant edge color. Other cards use an opaque inset underlay plus outward extension of the outermost pixels on all four sides. This avoids reflecting rounded transparent corners, text, or frame details into the bleed. Use `--bleed-mm` to change the bleed width and `--overwrite` to regenerate existing output.
+
+Quantities greater than one produce numbered files such as `_copy-1.png`, `_copy-2.png`, and corresponding `_copy-1_bleed.png` outputs. Scryfall is contacted only once per printing; extra copies are made locally.
 
 Use `--image-type art_crop` to download only the illustration. Run `scryfall-download --help` for all options.
 
@@ -70,6 +73,8 @@ SB: 1 Sideboard Card (XYZ) 7
 ```
 
 Blank lines, comment lines beginning with `#` or `//`, and common section headings are ignored. A malformed line is reported with its line number.
+
+A trailing `*E*` prismatic/etched marker is ignored, whether it appears after the card name or after the collector number. It does not affect proxy image selection.
 
 ## Scryfall API use
 

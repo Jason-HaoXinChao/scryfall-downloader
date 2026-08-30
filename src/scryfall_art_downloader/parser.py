@@ -1,4 +1,5 @@
 import re
+from dataclasses import replace
 
 from .models import DeckEntry
 
@@ -9,6 +10,7 @@ CARD_LINE = re.compile(
     r"\((?P<set>[A-Za-z0-9]+)\)\s+"
     r"(?P<number>\S+)\s*$"
 )
+PRISMATIC_MARKER = re.compile(r"\s*\*E\*\s*$", re.IGNORECASE)
 
 IGNORED_HEADINGS = {
     "deck",
@@ -39,6 +41,7 @@ def parse_deck_list(text: str) -> list[DeckEntry]:
             continue
         if line.casefold().startswith("sb:"):
             line = line[3:].strip()
+        line = PRISMATIC_MARKER.sub("", line)
 
         match = CARD_LINE.match(line)
         if not match:
@@ -47,10 +50,15 @@ def parse_deck_list(text: str) -> list[DeckEntry]:
             )
             continue
 
+        name = PRISMATIC_MARKER.sub("", match.group("name")).strip()
+        if not name:
+            errors.append(f"Line {line_number}: card name is empty")
+            continue
+
         entries.append(
             DeckEntry(
                 quantity=int(match.group("quantity")),
-                name=match.group("name").strip(),
+                name=name,
                 set_code=match.group("set").upper(),
                 collector_number=match.group("number"),
                 line_number=line_number,
@@ -75,3 +83,20 @@ def unique_printings(entries: list[DeckEntry]) -> list[DeckEntry]:
             unique.append(entry)
     return unique
 
+
+def combine_printings(entries: list[DeckEntry]) -> list[DeckEntry]:
+    """Combine repeated set/collector-number entries and sum their quantities."""
+    positions: dict[tuple[str, str], int] = {}
+    combined: list[DeckEntry] = []
+    for entry in entries:
+        position = positions.get(entry.printing_key)
+        if position is None:
+            positions[entry.printing_key] = len(combined)
+            combined.append(entry)
+        else:
+            current = combined[position]
+            combined[position] = replace(
+                current,
+                quantity=current.quantity + entry.quantity,
+            )
+    return combined
