@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .client import ScryfallClient, ScryfallError
+from .client import ScryfallClient, ScryfallError, card_has_name
 from .models import DeckEntry, DownloadResult
 from .processing import DEFAULT_BLEED_MM, add_bleed, bleed_path
 
@@ -65,11 +65,13 @@ def download_entries(
 
     for index, entry in enumerate(entries, start=1):
         try:
-            card = client.get_printing(entry.set_code, entry.collector_number)
-            expected = _normalized_name(entry.name)
-            actual = _normalized_name(card.get("name", ""))
+            card = client.get_printing(
+                entry.set_code,
+                entry.collector_number,
+                entry.name,
+            )
             warning = ""
-            if expected != actual:
+            if not card_has_name(card, entry.name):
                 warning = f"Name mismatch: deck says {entry.name!r}, Scryfall returned {card.get('name')!r}. "
 
             urls = image_urls(card, image_type)
@@ -80,7 +82,12 @@ def download_entries(
             processed_files: list[str] = []
             skipped = 0
             changed = False
-            base = safe_filename(f"{card['name']} [{entry.set_code} {entry.collector_number}]")
+            printing_label = entry.set_code or ""
+            if entry.collector_number:
+                printing_label += f" {entry.collector_number}"
+            printing_suffix = f" [{printing_label}]" if printing_label else ""
+            display_name = card.get("flavor_name") or card.get("printed_name") or card["name"]
+            base = safe_filename(f"{display_name}{printing_suffix}")
             for face_label, url in urls:
                 suffix = ".png" if image_type == "png" else _url_suffix(url)
                 face = f"_{face_label}" if face_label else ""
@@ -135,10 +142,6 @@ def download_entries(
             progress(index, len(entries), result)
 
     return results
-
-
-def _normalized_name(name: str) -> str:
-    return " ".join(name.casefold().split())
 
 
 def _url_suffix(url: str) -> str:

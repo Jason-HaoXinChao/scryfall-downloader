@@ -46,6 +46,30 @@ class ParseDeckListTests(unittest.TestCase):
         self.assertEqual(entry.name, "Sol Ring")
         self.assertEqual(entry.collector_number, "396")
 
+    def test_accepts_card_without_collector_number(self):
+        entry = parse_deck_list("1 Ephemerate (MH1)")[0]
+        self.assertEqual(entry.name, "Ephemerate")
+        self.assertEqual(entry.set_code, "MH1")
+        self.assertIsNone(entry.collector_number)
+
+    def test_combines_unnumbered_cards_by_set_and_name(self):
+        entries = parse_deck_list("1 Ephemerate (MH1)\n2 ephemerate (mh1)")
+        combined = combine_printings(entries)
+        self.assertEqual(len(combined), 1)
+        self.assertEqual(combined[0].quantity, 3)
+
+    def test_accepts_card_without_set_or_collector_number(self):
+        entry = parse_deck_list("1 Ephemerate")[0]
+        self.assertEqual(entry.name, "Ephemerate")
+        self.assertIsNone(entry.set_code)
+        self.assertIsNone(entry.collector_number)
+
+    def test_combines_name_only_cards_case_insensitively(self):
+        entries = parse_deck_list("1 Ephemerate\n2 ephemerate")
+        combined = combine_printings(entries)
+        self.assertEqual(len(combined), 1)
+        self.assertEqual(combined[0].quantity, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

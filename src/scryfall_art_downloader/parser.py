@@ -4,11 +4,14 @@ from dataclasses import replace
 from .models import DeckEntry
 
 
-CARD_LINE = re.compile(
+CARD_WITH_SET = re.compile(
     r"^\s*(?P<quantity>\d+)[xX]?\s+"
     r"(?P<name>.+?)\s+"
-    r"\((?P<set>[A-Za-z0-9]+)\)\s+"
-    r"(?P<number>\S+)\s*$"
+    r"\((?P<set>[A-Za-z0-9]+)\)"
+    r"(?:\s+(?P<number>\S+))?\s*$"
+)
+CARD_WITHOUT_SET = re.compile(
+    r"^\s*(?P<quantity>\d+)[xX]?\s+(?P<name>.+?)\s*$"
 )
 PRISMATIC_MARKER = re.compile(r"\s*\*E\*\s*$", re.IGNORECASE)
 
@@ -29,7 +32,7 @@ class DeckParseError(ValueError):
 
 
 def parse_deck_list(text: str) -> list[DeckEntry]:
-    """Parse Arena-style lines containing an exact set and collector number."""
+    """Parse deck lines with optional set and collector-number qualifiers."""
     entries: list[DeckEntry] = []
     errors: list[str] = []
 
@@ -43,10 +46,13 @@ def parse_deck_list(text: str) -> list[DeckEntry]:
             line = line[3:].strip()
         line = PRISMATIC_MARKER.sub("", line)
 
-        match = CARD_LINE.match(line)
+        match = CARD_WITH_SET.match(line)
+        has_set = match is not None
+        if match is None:
+            match = CARD_WITHOUT_SET.match(line)
         if not match:
             errors.append(
-                f"Line {line_number}: expected '1 Card Name (SET) 123', got {original!r}"
+                f"Line {line_number}: expected '1 Card Name' with an optional '(SET) 123', got {original!r}"
             )
             continue
 
@@ -59,8 +65,8 @@ def parse_deck_list(text: str) -> list[DeckEntry]:
             DeckEntry(
                 quantity=int(match.group("quantity")),
                 name=name,
-                set_code=match.group("set").upper(),
-                collector_number=match.group("number"),
+                set_code=match.group("set").upper() if has_set else None,
+                collector_number=match.group("number") if has_set else None,
                 line_number=line_number,
                 source_line=original,
             )
@@ -74,7 +80,7 @@ def parse_deck_list(text: str) -> list[DeckEntry]:
 
 
 def unique_printings(entries: list[DeckEntry]) -> list[DeckEntry]:
-    """Keep the first occurrence of each set/collector-number printing."""
+    """Keep the first occurrence of each numbered or name-selected printing."""
     seen: set[tuple[str, str]] = set()
     unique: list[DeckEntry] = []
     for entry in entries:
@@ -85,7 +91,7 @@ def unique_printings(entries: list[DeckEntry]) -> list[DeckEntry]:
 
 
 def combine_printings(entries: list[DeckEntry]) -> list[DeckEntry]:
-    """Combine repeated set/collector-number entries and sum their quantities."""
+    """Combine repeated printing selections and sum their quantities."""
     positions: dict[tuple[str, str], int] = {}
     combined: list[DeckEntry] = []
     for entry in entries:

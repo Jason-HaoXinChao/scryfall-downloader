@@ -13,3 +13,22 @@ build/
 downloads/
 download-report.json
 
+# Downloaded card collections and generated media
+/卡牌/
+/output/
+/cards/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.bmp
+*.tif
+*.tiff
+
+# Large archives and exports
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz

@@ -7,11 +7,11 @@ Download images for exact Magic: The Gathering printings from a deck list. Both 
 4 Lightning Bolt (CLB) 187
 ```
 
-The set code and collector number select the exact printing. The quantity controls how many image files are created. Repeated lines for the same printing are combined.
+An optional set code and collector number select the printing. The quantity controls how many image files are created. Repeated lines for the same printing are combined.
 
 ## Features
 
-- Exact printing lookup through Scryfall's `/cards/:set/:collector_number` API
+- Exact printing lookup by set/collector number, or exact card name constrained to a set
 - Complete card PNGs or artwork-only crops
 - Double-faced card support
 - Numbered output copies based on deck quantity
@@ -52,6 +52,8 @@ Bleed output has an exact 63×88 mm trim area plus 1.5 mm beyond every edge. At 
 
 Quantities greater than one produce numbered files such as `_copy-1.png`, `_copy-2.png`, and corresponding `_copy-1_bleed.png` outputs. Scryfall is contacted only once per printing; extra copies are made locally.
 
+Double-sided cards download both face images as `_front.png` and `_back.png`. Quantities apply to both faces, so two copies create `_front_copy-1.png`, `_front_copy-2.png`, `_back_copy-1.png`, and `_back_copy-2.png`. If bleed processing is enabled, every face receives its own `_bleed.png` output.
+
 Use `--image-type art_crop` to download only the illustration. Run `scryfall-download --help` for all options.
 
 You can also run without installing the package:
@@ -64,13 +66,19 @@ python -m scryfall_art_downloader.gui
 
 ## Deck-list format
 
-Each card line must contain a quantity, card name, set code, and collector number:
+Each card line must contain a quantity and card name. A set code and collector number may follow:
 
 ```text
 1 Card Name (SET) 123
 2x Another Card (ABC) A-45
 SB: 1 Sideboard Card (XYZ) 7
+1 Ephemerate (MH1)
+1 Ephemerate
 ```
+
+The set and collector number are optional. With a set but no collector number, the app asks Scryfall for the exact card name within that set. With neither, it uses an unconstrained exact-name lookup. A collector number remains the most precise way to select a particular variant and requires a set code.
+
+Alternate titles printed on reskinned cards are matched against Scryfall's `flavor_name` and `printed_name` fields. If an exact-name lookup initially resolves to the rules card's default art, the app checks that card's printings and selects the printing whose alternate title matches the deck entry. A supplied set code also constrains this fallback.
 
 Blank lines, comment lines beginning with `#` or `//`, and common section headings are ignored. A malformed line is reported with its line number.
 
